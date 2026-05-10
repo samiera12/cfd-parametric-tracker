@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CFD Parametric Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0a0c10; --bg2: #10141a; --bg3: #161c26; --bg4: #1c2330;
+  --border: #1e2a3a; --border2: #2a3a50;
+  --text: #c8d8e8; --text2: #7a8fa8; --text3: #445566;
+  --accent: #00d4ff; --accent2: #0097bb;
+  --green: #22c55e; --amber: #f59e0b; --red: #ef4444; --purple: #a78bfa;
+  --mono: 'IBM Plex Mono', monospace; --sans: 'IBM Plex Sans', sans-serif;
+}
+body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; min-height: 100vh; }
+.app { display: grid; grid-template-columns: 260px 1fr; grid-template-rows: 48px 1fr; height: 100vh; overflow: hidden; }
+.topbar { grid-column: 1 / -1; background: var(--bg2); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; gap: 16px; }
+.sidebar { background: var(--bg2); border-right: 1px solid var(--border); overflow-y: auto; display: flex; flex-direction: column; }
+.main { overflow-y: auto; background: var(--bg); }
+.logo { font-family: var(--mono); font-size: 13px; color: var(--accent); letter-spacing: 0.08em; font-weight: 500; }
+.logo span { color: var(--text2); }
+.topbar-status { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); font-family: var(--mono); }
+.dot-live { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.sidebar-section { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.sidebar-label { font-size: 10px; font-weight: 600; letter-spacing: 0.12em; color: var(--text3); padding: 0 16px 8px; text-transform: uppercase; font-family: var(--mono); }
+.sidebar-item { padding: 7px 16px; cursor: pointer; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text2); transition: all 0.15s; }
+.sidebar-item:hover { background: var(--bg3); color: var(--text); }
+.sidebar-item.active { background: var(--bg4); color: var(--accent); border-left: 2px solid var(--accent); }
+.sidebar-item .run-count { margin-left: auto; font-family: var(--mono); font-size: 11px; background: var(--bg4); padding: 1px 6px; border-radius: 3px; color: var(--text3); }
+.sidebar-add { margin: 10px 12px; }
+.btn { font-family: var(--sans); font-size: 13px; padding: 7px 14px; border-radius: 4px; border: 1px solid var(--border2); background: transparent; color: var(--text); cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { border-color: var(--accent2); color: var(--accent); }
+.btn-primary { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 500; }
+.btn-primary:hover { background: #00b8e6; color: var(--bg); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-danger { border-color: var(--red); color: var(--red); }
+.btn-danger:hover { background: var(--red); color: white; }
+.page { padding: 24px; animation: fadein 0.2s ease; }
+@keyframes fadein { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 20px; margin-bottom: 16px; }
+.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 12px; }
+.card-title { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; color: var(--text2); text-transform: uppercase; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.metric { background: var(--bg3); border: 1px solid var(--border); border-radius: 4px; padding: 14px; }
+.metric-label { font-family: var(--mono); font-size: 10px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 6px; }
+.metric-val { font-family: var(--mono); font-size: 22px; font-weight: 500; color: var(--text); }
+.metric-val.accent { color: var(--accent); }
+.metric-val.green { color: var(--green); }
+.metric-val.amber { color: var(--amber); }
+.badge { font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 3px; font-weight: 500; }
+.badge-converged { background: rgba(34,197,94,0.12); color: var(--green); border: 1px solid rgba(34,197,94,0.25); }
+.badge-running { background: rgba(0,212,255,0.1); color: var(--accent); border: 1px solid rgba(0,212,255,0.2); }
+.badge-queued { background: rgba(245,158,11,0.1); color: var(--amber); border: 1px solid rgba(245,158,11,0.2); }
+.badge-failed { background: rgba(239,68,68,0.1); color: var(--red); border: 1px solid rgba(239,68,68,0.2); }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+thead th { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--text3); text-transform: uppercase; text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; cursor: pointer; }
+tbody tr:hover { background: var(--bg3); }
+tbody td { padding: 10px 12px; font-family: var(--mono); font-size: 12px; color: var(--text); }
+tbody td.muted { color: var(--text2); }
+.chart-wrap { position: relative; height: 240px; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.modal { background: var(--bg2); border: 1px solid var(--border2); border-radius: 8px; padding: 28px; width: 480px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+.modal h2 { font-family: var(--mono); font-size: 14px; color: var(--accent); letter-spacing: 0.06em; margin-bottom: 20px; }
+.form-group { margin-bottom: 16px; }
+label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 6px; font-family: var(--mono); }
+input, select, textarea { width: 100%; background: var(--bg3); border: 1px solid var(--border2); border-radius: 4px; padding: 8px 12px; color: var(--text); font-family: var(--mono); font-size: 13px; outline: none; transition: border-color 0.15s; }
+input:focus, select:focus, textarea:focus { border-color: var(--accent2); }
+select option { background: var(--bg3); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+.detail-field .field-label { font-family: var(--mono); font-size: 10px; color: var(--text3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }
+.detail-field .field-val { font-family: var(--mono); font-size: 14px; color: var(--text); }
+.empty { text-align: center; padding: 60px 20px; color: var(--text3); }
+.empty h3 { font-size: 16px; margin-bottom: 8px; color: var(--text2); }
+.empty p { font-size: 13px; margin-bottom: 20px; }
+.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+.tab { font-family: var(--mono); font-size: 12px; padding: 10px 16px; cursor: pointer; color: var(--text2); border-bottom: 2px solid transparent; margin-bottom: -1px; letter-spacing: 0.06em; transition: all 0.15s; }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.hidden { display: none !important; }
+.flex { display: flex; align-items: center; gap: 10px; }
+.spacer { flex: 1; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="logo">CFD<span>// </span>PARAMETRIC TRACKER</div>
+    <div class="topbar-status">
+      <div class="dot-live"></div>
+      <span>API connected</span>
+    </div>
+  </header>
+
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Studies</div>
+      <div id="study-list"></div>
+      <div class="sidebar-add">
+        <button class="btn btn-sm" style="width:100%;justify-content:center" onclick="openNewStudyModal()">+ New Study</button>
+      </div>
+    </div>
+    <div class="sidebar-section" style="border:none">
+      <div class="sidebar-label">Quick Links</div>
+      <div class="sidebar-item" onclick="showDocs()">⚙ API Docs</div>
+    </div>
+  </aside>
+
+  <main class="main" id="main-content">
+    <div class="page">
+      <div class="empty">
+        <h3>Select a study</h3>
+        <p>Choose a parametric study from the sidebar or create a new one.</p>
+        <button class="btn btn-primary" onclick="openNewStudyModal()">+ Create Study</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- New Study Modal -->
+<div class="modal-overlay hidden" id="study-modal">
+  <div class="modal">
+    <h2>// NEW PARAMETRIC STUDY</h2>
+    <div class="form-group"><label>Study Name *</label><input id="s-name" type="text" placeholder="e.g. NACA 0012 Reynolds Sweep" /></div>
+    <div class="form-group"><label>Description</label><textarea id="s-desc" rows="2" placeholder="Brief description"></textarea></div>
+    <div class="form-row">
+      <div class="form-group"><label>Solver</label>
+        <select id="s-solver"><option>OpenFOAM</option><option>Fluent</option><option>SU2</option><option>STAR-CCM+</option><option>Other</option></select>
+      </div>
+      <div class="form-group"><label>Fluid</label><input id="s-fluid" type="text" value="Air" /></div>
+    </div>
+    <div class="form-group"><label>Geometry / Domain</label><input id="s-geometry" type="text" placeholder="e.g. NACA 0012 Airfoil" /></div>
+    <div class="form-row">
+      <div class="form-group"><label>Parameter Name *</label><input id="s-param" type="text" placeholder="e.g. Reynolds Number" /></div>
+      <div class="form-group"><label>Unit (optional)</label><input id="s-unit" type="text" placeholder="e.g. m/s" /></div>
+    </div>
+    <div class="form-group"><label>Output Metrics (comma separated)</label><input id="s-metrics" type="text" value="Cd, Cl" /></div>
+    <div class="form-actions">
+      <button class="btn" onclick="closeModal('study-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="createStudy()">Create Study</button>
+    </div>
+  </div>
+</div>
+
+<!-- New Run Modal -->
+<div class="modal-overlay hidden" id="run-modal">
+  <div class="modal">
+    <h2>// ADD SIMULATION RUN</h2>
+    <div class="form-group"><label>Run Label</label><input id="r-label" type="text" placeholder="Auto-generated if blank" /></div>
+    <div class="form-row">
+      <div class="form-group"><label id="r-param-label">Parameter Value *</label><input id="r-param-val" type="number" /></div>
+      <div class="form-group"><label>Mesh Cells</label><input id="r-mesh" type="number" placeholder="e.g. 80000" /></div>
+    </div>
+    <div class="form-group"><label>Output Metrics (leave blank if queued)</label></div>
+    <div id="r-outputs-fields"></div>
+    <div class="form-group"><label>Notes</label><textarea id="r-notes" rows="2"></textarea></div>
+    <div class="form-actions">
+      <button class="btn" onclick="closeModal('run-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="createRun()">Add Run</button>
+    </div>
+  </div>
+</div>
+
+<!-- API Docs Modal -->
+<div class="modal-overlay hidden" id="docs-modal">
+  <div class="modal" style="width:600px">
+    <h2>// REST API REFERENCE</h2>
+    <div style="font-family:var(--mono);font-size:12px;line-height:2;color:var(--text2)">
+      <div style="color:var(--accent);margin-bottom:8px">Base URL: http://localhost:3000/api</div>
+      <div><span style="color:var(--green)">GET</span>    /studies</div>
+      <div><span style="color:var(--green)">GET</span>    /studies/:id</div>
+      <div><span style="color:var(--amber)">POST</span>   /studies</div>
+      <div><span style="color:var(--purple)">PUT</span>    /studies/:id</div>
+      <div><span style="color:var(--red)">DELETE</span> /studies/:id</div>
+      <div style="margin-top:12px"><span style="color:var(--green)">GET</span>    /studies/:id/runs</div>
+      <div><span style="color:var(--green)">GET</span>    /studies/:id/runs/:runId</div>
+      <div><span style="color:var(--green)">GET</span>    /studies/:id/runs/compare/summary</div>
+      <div><span style="color:var(--amber)">POST</span>   /studies/:id/runs</div>
+      <div><span style="color:var(--purple)">PATCH</span>  /studies/:id/runs/:runId</div>
+      <div><span style="color:var(--red)">DELETE</span> /studies/:id/runs/:runId</div>
+    </div>
+    <div class="form-actions"><button class="btn" onclick="closeModal('docs-modal')">Close</button></div>
+  </div>
+</div>
+
+<script>
+const API = '/api';
+let studies = [], runs = [], activeStudyId = null, activeStudy = null, activeRunId = null;
+let compareChart = null, convChart = null;
+
+async function api(path, opts={}) {
+  const r = await fetch(API + path, { headers: {'Content-Type':'application/json'}, ...opts });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+async function loadStudies() {
+  studies = await api('/studies');
+  renderSidebar();
+}
+
+function renderSidebar() {
+  const el = document.getElementById('study-list');
+  if (!studies.length) { el.innerHTML = '<div style="padding:8px 16px;font-size:12px;color:var(--text3)">No studies yet</div>'; return; }
+  el.innerHTML = studies.map(s => `
+    <div class="sidebar-item ${s.id===activeStudyId?'active':''}" onclick="selectStudy('${s.id}')">
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name}</span>
+      <span class="run-count">${s.runCount||0}</span>
+    </div>`).join('');
+}
+
+async function selectStudy(id) {
+  activeStudyId = id;
+  activeRunId = null;
+  activeStudy = studies.find(s => s.id === id);
+  renderSidebar();
+  runs = await api(`/studies/${id}/runs`);
+  renderStudyPage();
+}
+
+function renderStudyPage() {
+  const s = activeStudy;
+  const converged = runs.filter(r => r.status === 'converged');
+  const running = runs.filter(r => r.status === 'running');
+  document.getElementById('main-content').innerHTML = `
+    <div class="page">
+      <div class="flex" style="margin-bottom:20px">
+        <div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px">${s.solver} · ${s.fluid} · ${s.geometry||'—'}</div>
+          <h1 style="font-size:20px;font-weight:500">${s.name}</h1>
+          ${s.description?`<p style="font-size:13px;color:var(--text2);margin-top:4px">${s.description}</p>`:''}
+        </div>
+        <div class="spacer"></div>
+        <button class="btn btn-primary" onclick="openNewRunModal()">+ Add Run</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteStudy()">Delete</button>
+      </div>
+      <div class="metrics">
+        <div class="metric"><div class="metric-label">Total Runs</div><div class="metric-val accent">${runs.length}</div></div>
+        <div class="metric"><div class="metric-label">Converged</div><div class="metric-val green">${converged.length}</div></div>
+        <div class="metric"><div class="metric-label">Running</div><div class="metric-val amber">${running.length}</div></div>
+        <div class="metric"><div class="metric-label">Parameter</div><div class="metric-val" style="font-size:14px">${s.parameterName}</div></div>
+      </div>
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('runs',this)">Runs</div>
+        <div class="tab" onclick="switchTab('compare',this)">Compare</div>
+        ${activeRunId?`<div class="tab" onclick="switchTab('detail',this)">Run Detail</div>`:''}
+      </div>
+      <div id="tab-runs">${renderRunsTable()}</div>
+      <div id="tab-compare" class="hidden">${renderCompareSection()}</div>
+      <div id="tab-detail" class="hidden"></div>
+    </div>`;
+  if (converged.length > 1) renderCompareChart();
+}
+
+function renderRunsTable() {
+  if (!runs.length) return `<div class="empty"><h3>No runs yet</h3><p>Add your first simulation run.</p><button class="btn btn-primary" onclick="openNewRunModal()">+ Add Run</button></div>`;
+  const metrics = activeStudy.outputMetrics || [];
+  return `<div class="card" style="padding:0"><div class="table-wrap"><table>
+    <thead><tr>
+      <th>Label</th><th>${activeStudy.parameterName}</th><th>Status</th>
+      <th>Mesh Cells</th><th>Iterations</th><th>Residual</th>
+      ${metrics.map(m=>`<th>${m}</th>`).join('')}<th>Wall Time</th>
+    </tr></thead>
+    <tbody>
+      ${runs.map(r=>`<tr onclick="selectRun('${r.id}')">
+        <td>${r.label}</td>
+        <td>${r.parameterValue > 1e4 ? r.parameterValue.toExponential(2) : r.parameterValue}</td>
+        <td><span class="badge badge-${r.status}">${r.status}</span></td>
+        <td class="muted">${(r.meshCells||0).toLocaleString()}</td>
+        <td class="muted">${r.iterations||'—'}</td>
+        <td class="muted">${r.residual ? r.residual.toExponential(2) : '—'}</td>
+        ${metrics.map(m=>`<td>${r.outputs&&r.outputs[m]!==undefined?r.outputs[m]:'—'}</td>`).join('')}
+        <td class="muted">${r.wallTime ? r.wallTime+'s' : '—'}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table></div></div>`;
+}
+
+function renderCompareSection() {
+  const converged = runs.filter(r => r.status === 'converged');
+  if (converged.length < 2) return `<div class="empty"><h3>Not enough data</h3><p>Need at least 2 converged runs.</p></div>`;
+  const metrics = activeStudy.outputMetrics || [];
+  return `<div class="card">
+    <div class="card-header">
+      <div class="card-title">Metric vs ${activeStudy.parameterName}</div>
+      <select id="compare-metric" onchange="updateCompareChart()" style="width:160px">
+        ${metrics.map(m=>`<option value="${m}">${m}</option>`).join('')}
+      </select>
+    </div>
+    <div class="chart-wrap"><canvas id="compare-chart"></canvas></div>
+  </div>`;
+}
+
+async function renderCompareChart() {
+  try {
+    const data = await api(`/studies/${activeStudyId}/runs/compare/summary`);
+    setTimeout(() => {
+      const canvas = document.getElementById('compare-chart');
+      if (!canvas) return;
+      if (compareChart) compareChart.destroy();
+      const metric = document.getElementById('compare-metric')?.value || (activeStudy.outputMetrics||['Cd'])[0];
+      const pts = data.datasets[metric] || [];
+      compareChart = new Chart(canvas, {
+        type: 'line',
+        data: { datasets: [{ label: metric, data: pts.map(p=>({x:p.x,y:p.y})), borderColor:'#00d4ff', backgroundColor:'rgba(0,212,255,0.08)', pointBackgroundColor:'#00d4ff', pointRadius:5, tension:0.3, fill:true }] },
+        options: {
+          responsive:true, maintainAspectRatio:false,
+          plugins:{ legend:{display:false}, tooltip:{ backgroundColor:'#161c26', borderColor:'#1e2a3a', borderWidth:1, titleColor:'#00d4ff', bodyColor:'#c8d8e8', titleFont:{family:'IBM Plex Mono',size:11}, callbacks:{ title: items => pts[items[0].dataIndex]?.label||'', label: i=>`${metric}: ${i.raw.y}` } } },
+          scales:{
+            x:{ type:'linear', title:{display:true,text:activeStudy.parameterName,color:'#445566',font:{family:'IBM Plex Mono',size:11}}, grid:{color:'#1e2a3a'}, ticks:{color:'#7a8fa8',font:{family:'IBM Plex Mono',size:11}} },
+            y:{ title:{display:true,text:metric,color:'#445566',font:{family:'IBM Plex Mono',size:11}}, grid:{color:'#1e2a3a'}, ticks:{color:'#7a8fa8',font:{family:'IBM Plex Mono',size:11}} }
+          }
+        }
+      });
+    }, 100);
+  } catch(e) { console.error(e); }
+}
+
+async function updateCompareChart() { if (compareChart) compareChart.destroy(); await renderCompareChart(); }
+
+async function selectRun(runId) {
+  activeRunId = runId;
+  const run = runs.find(r => r.id === runId);
+  renderStudyPage();
+  switchTabByName('detail');
+  renderRunDetail(run);
+}
+
+function renderRunDetail(run) {
+  const metrics = activeStudy.outputMetrics || [];
+  document.getElementById('tab-detail').innerHTML = `
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">${run.label}</div>
+        <span class="badge badge-${run.status}">${run.status}</span>
+        <button class="btn btn-danger btn-sm" onclick="deleteRun('${run.id}')">Delete</button>
+      </div>
+      <div class="detail-grid">
+        <div class="detail-field"><div class="field-label">${activeStudy.parameterName}</div><div class="field-val">${run.parameterValue}</div></div>
+        <div class="detail-field"><div class="field-label">Solver</div><div class="field-val">${run.solver}</div></div>
+        <div class="detail-field"><div class="field-label">Mesh Cells</div><div class="field-val">${(run.meshCells||0).toLocaleString()}</div></div>
+        <div class="detail-field"><div class="field-label">Iterations</div><div class="field-val">${run.iterations||'—'}</div></div>
+        <div class="detail-field"><div class="field-label">Final Residual</div><div class="field-val">${run.residual?run.residual.toExponential(2):'—'}</div></div>
+        <div class="detail-field"><div class="field-label">Wall Time</div><div class="field-val">${run.wallTime?run.wallTime+'s':'—'}</div></div>
+        ${metrics.map(m=>`<div class="detail-field"><div class="field-label">${m}</div><div class="field-val" style="color:var(--accent)">${run.outputs&&run.outputs[m]!==undefined?run.outputs[m]:'—'}</div></div>`).join('')}
+      </div>
+      ${run.notes?`<div style="font-size:13px;color:var(--text2);background:var(--bg3);padding:10px 14px;border-radius:4px;margin-bottom:16px">${run.notes}</div>`:''}
+    </div>`;
+}
+
+function switchTab(name, el) {
+  document.querySelectorAll('[id^="tab-"]').forEach(t=>t.classList.add('hidden'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-'+name)?.classList.remove('hidden');
+  el.classList.add('active');
+  if (name==='compare') renderCompareChart();
+}
+
+function switchTabByName(name) {
+  document.querySelectorAll('[id^="tab-"]').forEach(t=>t.classList.add('hidden'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-'+name)?.classList.remove('hidden');
+}
+
+function openNewStudyModal() { document.getElementById('study-modal').classList.remove('hidden'); }
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+function showDocs() { document.getElementById('docs-modal').classList.remove('hidden'); }
+
+async function createStudy() {
+  const name = document.getElementById('s-name').value.trim();
+  const parameterName = document.getElementById('s-param').value.trim();
+  if (!name || !parameterName) { alert('Name and Parameter Name are required'); return; }
+  const metrics = document.getElementById('s-metrics').value.split(',').map(m=>m.trim()).filter(Boolean);
+  await api('/studies', { method:'POST', body: JSON.stringify({ name, description:document.getElementById('s-desc').value, solver:document.getElementById('s-solver').value, fluid:document.getElementById('s-fluid').value, geometry:document.getElementById('s-geometry').value, parameterName, parameterUnit:document.getElementById('s-unit').value, outputMetrics:metrics }) });
+  closeModal('study-modal');
+  await loadStudies();
+  const newest = studies[studies.length-1];
+  if (newest) selectStudy(newest.id);
+}
+
+function openNewRunModal() {
+  document.getElementById('r-param-label').textContent = (activeStudy?.parameterName||'Parameter') + ' Value *';
+  const metrics = activeStudy?.outputMetrics || [];
+  document.getElementById('r-outputs-fields').innerHTML = metrics.map(m=>`
+    <div class="form-row" style="margin-bottom:10px">
+      <div class="form-group"><label>${m}</label><input id="ro-${m}" type="number" step="any" placeholder="—" /></div>
+    </div>`).join('');
+  document.getElementById('run-modal').classList.remove('hidden');
+}
+
+async function createRun() {
+  const parameterValue = parseFloat(document.getElementById('r-param-val').value);
+  if (isNaN(parameterValue)) { alert('Parameter value is required'); return; }
+  const metrics = activeStudy?.outputMetrics || [];
+  const outputs = {};
+  let hasOutputs = false;
+  metrics.forEach(m => { const v = parseFloat(document.getElementById('ro-'+m)?.value); if (!isNaN(v)) { outputs[m]=v; hasOutputs=true; } });
+  await api(`/studies/${activeStudyId}/runs`, { method:'POST', body: JSON.stringify({ label:document.getElementById('r-label').value||undefined, parameterValue, meshCells:parseInt(document.getElementById('r-mesh').value)||undefined, outputs:hasOutputs?outputs:undefined, notes:document.getElementById('r-notes').value }) });
+  closeModal('run-modal');
+  await loadStudies();
+  runs = await api(`/studies/${activeStudyId}/runs`);
+  renderStudyPage();
+}
+
+async function deleteRun(runId) {
+  if (!confirm('Delete this run?')) return;
+  await api(`/studies/${activeStudyId}/runs/${runId}`, { method:'DELETE' });
+  activeRunId = null;
+  await loadStudies();
+  runs = await api(`/studies/${activeStudyId}/runs`);
+  renderStudyPage();
+}
+
+async function deleteStudy() {
+  if (!confirm('Delete this study and all its runs?')) return;
+  await api(`/studies/${activeStudyId}`, { method:'DELETE' });
+  activeStudyId = null; activeStudy = null; runs = [];
+  await loadStudies();
+  document.getElementById('main-content').innerHTML = `<div class="page"><div class="empty"><h3>Select a study</h3><p>Choose from the sidebar or create a new one.</p><button class="btn btn-primary" onclick="openNewStudyModal()">+ Create Study</button></div></div>`;
+}
+
+window.addEventListener('keydown', e => { if (e.key==='Escape') document.querySelectorAll('.modal-overlay').forEach(m=>m.classList.add('hidden')); });
+
+loadStudies().then(() => { if (studies.length) selectStudy(studies[0].id); });
+</script>
+</body>
+</html>
