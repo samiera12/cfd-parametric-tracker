@@ -135,6 +135,6 @@ cfd-parametric-tracker/
 
 ## About
 
-Built by [Your Name](https://github.com/samiera12)
+Built by [Samiera](https://github.com/samiera12)
 
 This project combines CFD domain knowledge with modern web development to solve a real workflow problem in simulation-driven engineering.
